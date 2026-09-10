@@ -143,18 +143,23 @@ async function hydrate() {
 
   let netObj = null;
   let cloudObj = null;
-  if (window.GymNet) {
-    try { netObj = parseSave(await GymNet.read()); } catch (e) { console.warn(e); }
-  }
-  if (window.GymTg && GymTg.hasCloud()) {
-    try { cloudObj = parseSave(await GymTg.read()); } catch (e) { console.warn(e); }
+  for (let i = 0; i < 5; i++) {
+    if (window.GymNet) {
+      try { netObj = parseSave(await GymNet.read()); } catch (e) { console.warn(e); }
+    }
+    if (window.GymTg) {
+      try { cloudObj = parseSave(await GymTg.read()); } catch (e) { console.warn(e); }
+    }
+    if ((netObj && netObj.user) || (cloudObj && cloudObj.user) || (localAny && localAny.user && i === 4)) break;
+    if (netObj && netObj.user) break;
+    if (cloudObj && cloudObj.user) break;
+    await new Promise((resolve) => setTimeout(resolve, 350));
   }
 
   const pick = newestSave(newestSave(netObj, cloudObj), localAny);
   if (!pick || !pick.user) return false;
   state = Object.assign(emptyState(), pick);
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-  const raw = JSON.stringify(state);
   const wrote = await save({ immediate: true });
   if (!wrote) {
     toast("Герой на этом устройстве есть, в облако не ушёл: " + cloudErr((window.GymNet && GymNet.errorText && GymNet.errorText()) || "нет ответа"), true);

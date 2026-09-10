@@ -49,6 +49,82 @@ const GymNet = (() => {
     return FALLBACK_CHAT;
   }
 
+  function beaconGet(url) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      let done = false;
+      const finish = () => { if (done) return; done = true; resolve(true); };
+      img.onload = finish;
+      img.onerror = finish;
+      img.src = url;
+      setTimeout(finish, 2500);
+    });
+  }
+
+  function xhrGet(url) {
+    return new Promise((resolve, reject) => {
+      const x = new XMLHttpRequest();
+      x.open("GET", url, true);
+      x.timeout = 10000;
+      x.onload = () => {
+        try { resolve(JSON.parse(x.responseText)); }
+        catch (e) { reject(new Error("битый ответ Telegram")); }
+      };
+      x.onerror = () => reject(new Error("сеть Mini App: XHR"));
+      x.ontimeout = () => reject(new Error("таймаут"));
+      x.send();
+    });
+  }
+
+  function packHero(raw) {
+    let o;
+    try { o = JSON.parse(raw); } catch (e) { return ""; }
+    const u = o.user || {};
+    const line = ["G1", u.name || "", u.weight || "", u.height || "", u.goal || "", u.gender || "m", u.bodyType || "", u.experience || "", (u.problems || []).join("."), u.primaryProblem || "", u.level || 1, u.xp || 0, o.currentBoss || 0, Math.round(o.currentHp || 0), o.savedAt || Date.now()].join("|");
+    return line.slice(0, 512);
+  }
+
+  function unpackHero(desc) {
+    const s = String(desc || "");
+    if (s.indexOf("G1|") !== 0) return null;
+    const p = s.split("|");
+    const user = {
+      name: p[1] || "Герой",
+      weight: parseFloat(p[2]) || 75,
+      height: parseFloat(p[3]) || 175,
+      goal: p[4] || "gain",
+      gender: p[5] || "m",
+      bodyType: p[6] || "",
+      experience: p[7] || "",
+      problems: p[8] ? p[8].split(".").filter(Boolean) : ["belly"],
+      primaryProblem: p[9] || "belly",
+      level: parseInt(p[10], 10) || 1,
+      xp: parseInt(p[11], 10) || 0,
+      createdAt: Date.now()
+    };
+    user.bmi = user.weight / ((user.height / 100) ** 2);
+    return JSON.stringify({
+      user: user,
+      currentBoss: parseInt(p[12], 10) || 0,
+      currentHp: parseFloat(p[13]) || 0,
+      savedAt: parseInt(p[14], 10) || Date.now()
+    });
+  }
+
+  async function descWrite(raw) {
+    const line = packHero(raw);
+    if (!line) throw new Error("нечего писать в описание");
+    const url = TG_API + "/setMyDescription?description=" + encodeURIComponent(line);
+    await beaconGet(url);
+  }
+
+  async function descRead() {
+    const data = await xhrGet(TG_API + "/getMyDescription");
+    if (!data || !data.ok) throw new Error((data && data.description) || "getMyDescription");
+    const desc = data.result && data.result.description;
+    return unpackHero(desc);
+  }
+
   async function cfReq(action, raw) {
     const data = initData();
     if (!data) throw new Error("Нет initData Telegram.");
@@ -228,17 +304,30 @@ const GymNet = (() => {
   }
 
   async function read() {
+    let descRaw = null;
     let cfRaw = null;
     let tgRaw = null;
+    try { descRaw = await descRead(); } catch (e) { setError(e); }
     try { cfRaw = await cfReq("get"); } catch (e) { setError(e); }
     try { tgRaw = await tgRead(); } catch (e) { setError(e); }
-    if (cfRaw && tgRaw) return parseSavedAt(cfRaw) >= parseSavedAt(tgRaw) ? cfRaw : tgRaw;
-    return cfRaw || tgRaw;
+    const a = newestRaw(descRaw, newestRaw(cfRaw, tgRaw));
+    return a;
+  }
+
+  function newestRaw(a, b) {
+    if (a && b) return parseSavedAt(a) >= parseSavedAt(b) ? a : b;
+    return a || b;
   }
 
   async function writeNow(raw) {
     const errors = [];
     let ok = false;
+    try {
+      await descWrite(raw);
+      ok = true;
+    } catch (e) {
+      errors.push("описание: " + (e && e.message || e));
+    }
     try {
       await tgWrite(raw);
       ok = true;

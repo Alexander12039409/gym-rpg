@@ -1,9 +1,9 @@
 /* Gym RPG — Telegram Mini App. Без import, чтобы file:// не ломался. */
 
 const GymTg = (() => {
-  const DATA_KEY = "gr10d";
-  const META_KEY = "gr10n";
-  const CHUNK_PREFIX = "gr10c";
+  const DATA_KEY = "sv1";
+  const META_KEY = "sv1n";
+  const CHUNK_PREFIX = "sv1c";
   const CHUNK = 3500;
   const WRITE_WAIT = 280;
   const CALL_MS = 15000;
@@ -246,8 +246,8 @@ const GymTg = (() => {
       if (single) return single;
     } catch (e) {}
     try {
-      const old = await getItem("gr9d");
-      if (old) return old;
+      const old10 = await getItem("gr10d");
+      if (old10) return old10;
     } catch (e) {}
     try {
       const nRaw = await getItem(META_KEY);
