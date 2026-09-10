@@ -19,7 +19,7 @@ function toast(msg, warn) {
   t.classList.toggle("warn", !!warn);
   t.classList.add("on");
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => t.classList.remove("on"), 3200);
+  toast._t = setTimeout(() => t.classList.remove("on"), warn ? 7000 : 3200);
 }
 
 let state = emptyState();
@@ -131,7 +131,11 @@ async function hydrate() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
   const raw = JSON.stringify(state);
   if (window.GymNet) {
-    try { await GymNet.write(raw); } catch (e) { console.warn(e); }
+    try {
+      await GymNet.write(raw);
+    } catch (e) {
+      toast("Герой на этом устройстве есть, в облако не ушёл: " + (((e && e.message) || (GymNet.errorText && GymNet.errorText()) || "нет ответа") + "").slice(0, 180), true);
+    }
   }
   return true;
 }
@@ -2056,8 +2060,13 @@ function previewCreate() {
 
 function paintCloudStatus() {
   const el = $("cloud-status");
-  if (!el || !window.GymTg) return;
-  el.textContent = GymTg.statusText() || "";
+  if (!el) return;
+  const netErr = window.GymNet && typeof GymNet.errorText === "function" && GymNet.errorText();
+  if (netErr) {
+    el.textContent = "Облако: " + netErr;
+    return;
+  }
+  if (window.GymTg) el.textContent = GymTg.statusText() || "";
 }
 
 async function init() {
@@ -2080,6 +2089,7 @@ async function init() {
       return ok;
     };
     if (!(await applyCloud())) {
+      paintCloudStatus();
       const retry = async () => {
         if (state.user) return;
         await applyCloud();

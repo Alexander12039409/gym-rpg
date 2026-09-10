@@ -1,4 +1,4 @@
-/* Сейв: Cloudflare, если Mini App туда не достучится — Telegram Bot API. */
+/* Сейв между устройствами: сначала Telegram (телефон его точно видит), потом Cloudflare. */
 
 const GymNet = (() => {
   const CF_URLS = [
@@ -108,14 +108,42 @@ const GymNet = (() => {
     return await new Response(stream).text();
   }
 
+  function slimRaw(raw) {
+    const out = [raw];
+    try {
+      const o = JSON.parse(raw);
+      out.push(JSON.stringify({
+        savedAt: o.savedAt,
+        user: o.user,
+        currentBoss: o.currentBoss,
+        currentHp: o.currentHp,
+        revengeKills: o.revengeKills,
+        plans: o.plans,
+        lastWeights: o.lastWeights,
+        achievements: o.achievements
+      }));
+      out.push(JSON.stringify({
+        savedAt: o.savedAt,
+        user: o.user,
+        currentBoss: o.currentBoss,
+        currentHp: o.currentHp
+      }));
+    } catch (e) {}
+    return out;
+  }
+
   async function pack(raw) {
-    const plain = "GYMRPG\n" + raw;
-    if (plain.length <= 4096) return plain;
-    const z = await gzipB64(raw);
-    if (!z) throw new Error("сейв слишком большой");
-    const packed = "GYMRPGZ\n" + z;
-    if (packed.length > 4096) throw new Error("сейв слишком большой даже сжатый");
-    return packed;
+    const attempts = slimRaw(raw);
+    for (let i = 0; i < attempts.length; i++) {
+      const plain = "GYMRPG\n" + attempts[i];
+      if (plain.length <= 4096) return plain;
+      const z = await gzipB64(attempts[i]);
+      if (z) {
+        const packed = "GYMRPGZ\n" + z;
+        if (packed.length <= 4096) return packed;
+      }
+    }
+    throw new Error("сейв не влез в сообщение Telegram");
   }
 
   async function unpack(text) {
@@ -123,6 +151,10 @@ const GymNet = (() => {
     if (s.indexOf("GYMRPGZ\n") === 0) return await gunzipB64(s.slice(8));
     if (s.indexOf("GYMRPG\n") === 0) return s.slice(7);
     return null;
+  }
+
+  function parseSavedAt(raw) {
+    try { return (JSON.parse(raw) || {}).savedAt || 0; } catch (e) { return 0; }
   }
 
   async function tgRead() {
@@ -141,6 +173,7 @@ const GymNet = (() => {
     const info = await tgApi("getMyShortDescription", {});
     const desc = String((info && info.short_description) || "");
     const prev = desc.indexOf(MARK) === 0 ? Number(desc.slice(MARK.length)) : 0;
+    let msgId = prev;
     if (prev) {
       try {
         await tgApi("editMessageText", {
@@ -149,23 +182,28 @@ const GymNet = (() => {
           text: text,
           disable_web_page_preview: true
         });
-        try { await tgApi("pinChatMessage", { chat_id: id, message_id: prev, disable_notification: true }); } catch (e) {}
-        return;
+        msgId = prev;
       } catch (e) {
-        if (/not modified/i.test(String(e.message || e))) return;
+        if (!/not modified/i.test(String(e.message || e))) msgId = 0;
       }
     }
-    const sent = await tgApi("sendMessage", {
-      chat_id: id,
-      text: text,
-      disable_notification: true,
-      disable_web_page_preview: true
-    });
-    await tgApi("setMyShortDescription", { short_description: (MARK + sent.message_id).slice(0, 120) });
-    try { await tgApi("pinChatMessage", { chat_id: id, message_id: sent.message_id, disable_notification: true }); } catch (e) {}
-    if (prev && prev !== sent.message_id) {
-      try { await tgApi("deleteMessage", { chat_id: id, message_id: prev }); } catch (e) {}
+    if (!msgId) {
+      const sent = await tgApi("sendMessage", {
+        chat_id: id,
+        text: text,
+        disable_notification: true,
+        disable_web_page_preview: true
+      });
+      msgId = sent && sent.message_id;
+      if (!msgId) throw new Error("Telegram не вернул message_id");
+      if (prev && prev !== msgId) {
+        try { await tgApi("deleteMessage", { chat_id: id, message_id: prev }); } catch (e) {}
+      }
     }
+    await tgApi("setMyShortDescription", { short_description: (MARK + msgId).slice(0, 120) });
+    await tgApi("pinChatMessage", { chat_id: id, message_id: msgId, disable_notification: true });
+    const check = await tgRead();
+    if (!check) throw new Error("сейв не закрепился в чате с ботом");
   }
 
   async function tgWipe() {
@@ -179,29 +217,35 @@ const GymNet = (() => {
   }
 
   async function read() {
-    try {
-      return await cfReq("get");
-    } catch (e) {
-      setError(e);
-      return await tgRead();
-    }
+    let cfRaw = null;
+    let tgRaw = null;
+    try { cfRaw = await cfReq("get"); } catch (e) { setError(e); }
+    try { tgRaw = await tgRead(); } catch (e) { setError(e); }
+    if (cfRaw && tgRaw) return parseSavedAt(cfRaw) >= parseSavedAt(tgRaw) ? cfRaw : tgRaw;
+    return cfRaw || tgRaw;
   }
 
   async function writeNow(raw) {
+    const errors = [];
+    let ok = false;
+    try {
+      await tgWrite(raw);
+      ok = true;
+    } catch (e) {
+      errors.push("Telegram: " + (e && e.message || e));
+    }
     try {
       await cfReq("put", raw);
-      lastError = "";
-      return "cf";
-    } catch (cfErr) {
-      try {
-        await tgWrite(raw);
-        lastError = "";
-        return "tg";
-      } catch (tgErr) {
-        setError(new Error((cfErr && cfErr.message || cfErr) + " / запасной: " + (tgErr && tgErr.message || tgErr)));
-        throw tgErr;
-      }
+      ok = true;
+    } catch (e) {
+      errors.push("CF: " + (e && e.message || e));
     }
+    if (!ok) {
+      setError(new Error(errors.join(" / ")));
+      throw new Error(lastError);
+    }
+    lastError = "";
+    return "ok";
   }
 
   function persist(raw) {
