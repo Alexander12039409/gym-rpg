@@ -326,7 +326,7 @@ const GymTg = (() => {
       const keys = await getAllKeys();
       const drop = keys.filter((k) => {
         const s = String(k);
-        return s === DATA_KEY || s === META_KEY || s.indexOf(CHUNK_PREFIX) === 0 || s === "gr9d" || s === "gr9n" || s.indexOf("gr9c") === 0;
+        return /^gr\d/i.test(s) || /^gymRpg/i.test(s) || /^gym/i.test(s);
       });
       if (drop.length) await removeItems(drop);
       else await removeItems([DATA_KEY, META_KEY, "gr9d"]);

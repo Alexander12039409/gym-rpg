@@ -93,20 +93,15 @@ function save(opts) {
   const raw = JSON.stringify(state);
   try { localStorage.setItem(STORAGE_KEY, raw); } catch (e) {}
   const immediate = !!(opts && opts.immediate);
-  const jobs = [];
-  if (window.GymTg) {
-    if (immediate) jobs.push(GymTg.persistNow(raw).catch(() => false));
-    else GymTg.persist(raw);
+  if (!window.GymNet) return Promise.resolve(false);
+  if (!immediate) {
+    GymNet.persist(raw);
+    return Promise.resolve(false);
   }
-  if (window.GymNet) {
-    if (immediate) jobs.push(GymNet.write(raw).then(() => true).catch((err) => {
-      console.warn(err);
-      return false;
-    }));
-    else GymNet.persist(raw);
-  }
-  if (!immediate) return Promise.resolve(false);
-  return Promise.all(jobs).then((res) => res.some(Boolean));
+  return GymNet.write(raw).then(() => true).catch((err) => {
+    console.warn(err);
+    return false;
+  });
 }
 
 function load() {
@@ -126,24 +121,17 @@ async function hydrate() {
   forgetOldSaves();
 
   let netObj = null;
-  let cloudObj = null;
   if (window.GymNet) {
     try { netObj = parseSave(await GymNet.read()); } catch (e) { console.warn(e); }
   }
-  if (window.GymTg && GymTg.hasCloud()) {
-    try { cloudObj = parseSave(await GymTg.read()); } catch (e) { console.warn(e); }
-  }
 
-  const pick = newestSave(newestSave(netObj, cloudObj), localAny);
+  const pick = newestSave(netObj, localAny);
   if (!pick || !pick.user) return false;
   state = Object.assign(emptyState(), pick);
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
   const raw = JSON.stringify(state);
   if (window.GymNet) {
     try { await GymNet.write(raw); } catch (e) { console.warn(e); }
-  }
-  if (window.GymTg && GymTg.hasCloud()) {
-    try { await GymTg.persistNow(raw); } catch (e) { console.warn(e); }
   }
   return true;
 }
@@ -2075,6 +2063,9 @@ function paintCloudStatus() {
 async function init() {
   try {
     if (window.GymTg) GymTg.boot();
+    if (window.GymPurge) {
+      try { await GymPurge.run(); } catch (e) { console.warn(e); }
+    }
     lockViewport();
     bind();
     renderBodyCarousel();
