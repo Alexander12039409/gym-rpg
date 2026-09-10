@@ -1,12 +1,12 @@
 /* Gym RPG — Telegram Mini App. Без import, чтобы file:// не ломался. */
 
 const GymTg = (() => {
-  const DATA_KEY = "gr9d";
-  const META_KEY = "gr9n";
-  const CHUNK_PREFIX = "gr9c";
+  const DATA_KEY = "gr10d";
+  const META_KEY = "gr10n";
+  const CHUNK_PREFIX = "gr10c";
   const CHUNK = 3500;
   const WRITE_WAIT = 280;
-  const CALL_MS = 12000;
+  const CALL_MS = 15000;
 
   let pendingRaw = null;
   let writing = false;
@@ -18,42 +18,46 @@ const GymTg = (() => {
     catch (e) { return null; }
   }
 
+  function webView() {
+    try { return window.Telegram && window.Telegram.WebView; }
+    catch (e) { return null; }
+  }
+
   function cloud() {
     const tg = webApp();
     return tg && tg.CloudStorage ? tg.CloudStorage : null;
   }
 
   function inTelegram() {
+    if (window.TelegramWebviewProxy) return true;
     const tg = webApp();
     if (!tg) return false;
     if (tg.initData) return true;
     if (tg.initDataUnsafe && tg.initDataUnsafe.user) return true;
     const p = String(tg.platform || "");
-    return p && p !== "unknown";
+    if (p && p !== "unknown") return true;
+    const wv = webView();
+    return !!(wv && wv.initParams && wv.initParams.tgWebAppData);
   }
 
-  function cloudReady() {
+  function diag() {
     const tg = webApp();
-    if (!tg) return false;
-    try {
-      if (typeof tg.isVersionAtLeast === "function") return tg.isVersionAtLeast("6.9");
-    } catch (e) {}
-    return false;
+    const wv = webView();
+    const ver = tg && tg.version ? String(tg.version) : (wv && wv.initParams && wv.initParams.tgWebAppVersion) || "?";
+    const plat = tg && tg.platform ? String(tg.platform) : "?";
+    const proxy = window.TelegramWebviewProxy ? "proxy" : "no-proxy";
+    const data = tg && tg.initData ? "init" : "no-init";
+    return ver + " / " + plat + " / " + proxy + " / " + data;
   }
 
   function hasCloud() {
-    const cs = cloud();
-    if (!cs || typeof cs.setItem !== "function" || typeof cs.getItem !== "function") return false;
-    return inTelegram() && cloudReady();
+    return inTelegram() && !!(cloud() || (webView() && typeof webView().postEvent === "function") || window.TelegramWebviewProxy);
   }
 
   function statusText() {
-    if (!inTelegram()) return "";
-    if (!cloudReady()) {
-      return "Telegram не дал облако. Открой приложение через Main Mini App в BotFather, не из обычной ссылки.";
-    }
-    if (hasCloud()) return "Облако Telegram включено. Если спросит Allow — жми.";
-    return "";
+    if (!inTelegram()) return "Это не Mini App. Открой https://t.me/gym_rpg_app_bot?startapp";
+    if (hasCloud()) return "Облако: пробуем Telegram CloudStorage. Если спросит Allow — жми. " + diag();
+    return "Облако недоступно. " + diag();
   }
 
   function viewportHeight() {
@@ -106,6 +110,53 @@ const GymTg = (() => {
     window.addEventListener("pagehide", flush);
   }
 
+  function parseResult(res) {
+    if (typeof res === "string") {
+      const s = res.trim();
+      if ((s.charAt(0) === "{" && s.charAt(s.length - 1) === "}") || (s.charAt(0) === "[" && s.charAt(s.length - 1) === "]")) {
+        try { return JSON.parse(s); } catch (e) { return res; }
+      }
+    }
+    return res;
+  }
+
+  function nativeInvoke(method, params) {
+    return new Promise((resolve, reject) => {
+      const wv = webView();
+      if (!wv || typeof wv.postEvent !== "function" || typeof wv.onEvent !== "function") {
+        reject(new Error("WebView недоступен"));
+        return;
+      }
+      const req_id = "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      let done = false;
+      const finish = (err, value) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        try { wv.offEvent("custom_method_invoked", onInvoked); } catch (e) {}
+        if (err) reject(err);
+        else resolve(value);
+      };
+      const timer = setTimeout(() => finish(new Error("CloudStorage timeout")), CALL_MS);
+      function onInvoked(eventType, eventData) {
+        const data = eventData || {};
+        if (String(data.req_id) !== req_id) return;
+        if (data.error) finish(new Error(String(data.error)));
+        else finish(null, parseResult(data.result));
+      }
+      wv.onEvent("custom_method_invoked", onInvoked);
+      try {
+        wv.postEvent("web_app_invoke_custom_method", false, {
+          req_id: req_id,
+          method: method,
+          params: params || {}
+        });
+      } catch (e) {
+        finish(e);
+      }
+    });
+  }
+
   function unwrapCallback(err, value) {
     if (typeof err === "string" && err) return { error: new Error(err) };
     if (err && value === undefined && typeof err === "object" && !Array.isArray(err) && (err.message || err.error)) {
@@ -115,11 +166,11 @@ const GymTg = (() => {
     return { value };
   }
 
-  function csCall(method, args) {
+  function sdkCall(method, args) {
     return new Promise((resolve, reject) => {
       const cs = cloud();
       if (!cs || typeof cs[method] !== "function") {
-        reject(new Error("CloudStorage недоступен"));
+        reject(new Error("CloudStorage SDK недоступен"));
         return;
       }
       let done = false;
@@ -129,9 +180,7 @@ const GymTg = (() => {
         clearTimeout(timer);
         fn();
       };
-      const timer = setTimeout(() => {
-        finish(() => reject(new Error("CloudStorage timeout")));
-      }, CALL_MS);
+      const timer = setTimeout(() => finish(() => reject(new Error("CloudStorage timeout"))), CALL_MS);
       const list = args.slice();
       list.push((err, value) => {
         finish(() => {
@@ -148,26 +197,38 @@ const GymTg = (() => {
     });
   }
 
-  function getItem(key) {
-    return csCall("getItem", [key]).then((v) => (v == null ? "" : String(v)));
+  async function callStore(kind, payload) {
+    try {
+      if (kind === "set") return await nativeInvoke("saveStorageValue", payload);
+      if (kind === "get") return await nativeInvoke("getStorageValues", payload);
+      if (kind === "keys") return await nativeInvoke("getStorageKeys", {});
+      if (kind === "del") return await nativeInvoke("deleteStorageValues", payload);
+    } catch (e) {
+      if (kind === "set") return sdkCall("setItem", [payload.key, payload.value]);
+      if (kind === "get") return sdkCall("getItems", [payload.keys]);
+      if (kind === "keys") return sdkCall("getKeys", []);
+      if (kind === "del") return sdkCall("removeItems", [payload.keys]);
+      throw e;
+    }
   }
 
-  function getItems(keys) {
-    if (!keys.length) return Promise.resolve({});
-    return csCall("getItems", [keys]).then((values) => values || {});
+  async function getItem(key) {
+    const values = await callStore("get", { keys: [key] }) || {};
+    const v = values[key];
+    return v == null ? "" : String(v);
   }
 
-  function setItem(key, value) {
-    return csCall("setItem", [key, value]);
+  async function setItem(key, value) {
+    return callStore("set", { key: key, value: value });
   }
 
-  function removeItems(keys) {
-    if (!keys.length) return Promise.resolve();
-    return csCall("removeItems", [keys]);
+  async function removeItems(keys) {
+    if (!keys.length) return;
+    return callStore("del", { keys: keys });
   }
 
   async function getAllKeys() {
-    const keys = await csCall("getKeys", []);
+    const keys = await callStore("keys", {});
     return Array.isArray(keys) ? keys : [];
   }
 
@@ -178,12 +239,16 @@ const GymTg = (() => {
       if (single) return single;
     } catch (e) {}
     try {
+      const old = await getItem("gr9d");
+      if (old) return old;
+    } catch (e) {}
+    try {
       const nRaw = await getItem(META_KEY);
       const n = parseInt(nRaw, 10);
       if (!n || n < 1) return null;
       const keys = [];
       for (let i = 0; i < n; i++) keys.push(CHUNK_PREFIX + i);
-      const parts = await getItems(keys);
+      const parts = (await callStore("get", { keys: keys })) || {};
       let raw = "";
       for (let i = 0; i < n; i++) raw += parts[CHUNK_PREFIX + i] || "";
       return raw || null;
@@ -193,7 +258,7 @@ const GymTg = (() => {
   }
 
   async function writeNow(raw) {
-    if (!hasCloud() || raw == null) throw new Error("CloudStorage недоступен");
+    if (!hasCloud() || raw == null) throw new Error("CloudStorage недоступен. " + diag());
     if (raw.length <= CHUNK) {
       await setItem(DATA_KEY, raw);
       return;
@@ -217,7 +282,7 @@ const GymTg = (() => {
       await writeNow(raw);
     } catch (err) {
       console.warn("GymTg write", err);
-      if (typeof toast === "function") toast("Telegram не сохранил облако. Нажми Allow, если спросит.", true);
+      if (typeof toast === "function") toast("Telegram не сохранил облако: " + (err && err.message || err), true);
     } finally {
       writing = false;
       if (pendingRaw != null) await runWriteQueue();
@@ -237,7 +302,7 @@ const GymTg = (() => {
     pendingRaw = null;
     await writeNow(raw);
     const check = await read();
-    if (!check || check.indexOf("\"user\"") < 0) throw new Error("облако не подтвердило сейв");
+    if (!check || check.indexOf("\"user\"") < 0) throw new Error("облако не подтвердило сейв. " + diag());
     return true;
   }
 
@@ -254,17 +319,17 @@ const GymTg = (() => {
       const keys = await getAllKeys();
       const drop = keys.filter((k) => {
         const s = String(k);
-        return s === DATA_KEY || s === META_KEY || s.indexOf(CHUNK_PREFIX) === 0;
+        return s === DATA_KEY || s === META_KEY || s.indexOf(CHUNK_PREFIX) === 0 || s === "gr9d" || s === "gr9n" || s.indexOf("gr9c") === 0;
       });
       if (drop.length) await removeItems(drop);
-      else await removeItems([DATA_KEY, META_KEY]);
+      else await removeItems([DATA_KEY, META_KEY, "gr9d"]);
     } catch (err) {
       console.warn("GymTg wipe", err);
     }
   }
 
   return {
-    boot, inTelegram, hasCloud, cloudReady, statusText, read, persist, persistNow, flush, wipe,
+    boot, inTelegram, hasCloud, statusText, diag, read, persist, persistNow, flush, wipe,
     viewportHeight, applyChrome, setSwipeLock
   };
 })();

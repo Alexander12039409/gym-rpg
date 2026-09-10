@@ -9,8 +9,8 @@ Gym RPG v4 — контекст для следующего чата
 - v3 (архив, не трогать): E:\gym app\gym-rpg-v3\  ключ gymRpgV7, порт 8766
 - v2: E:\gym app\gym-rpg-v2\  ключ gymRpgV6, порт 8765
 - v1: E:\gym app\  ключ gymRpgV4
-- Сохранение v4: localStorage ключ gymRpgV9 (v8 и старше стираются при входе).
-- Telegram Mini App: js/tg.js + telegram-web-app.js. В WebView сейв в CloudStorage бота, ключ gr9d (старые g8* чистятся). Инструкция: TELEGRAM.md.
+- Сохранение v4: localStorage ключ gymRpgV10. Живым остаётся только герой «Попков»; остальные локальные/облачные сейвы отбрасываются.
+- Telegram Mini App: js/tg.js пишет CloudStorage напрямую через WebView.postEvent (без отсечки version 6.9). Ключ gr10d.
 - Кросс-девайс: CloudStorage этого бота + тот же Telegram-аккаунт. Браузер без Telegram = только localStorage.
 - Создание героя ждёт persistNow, иначе iOS убивает Mini App до записи в облако.
 

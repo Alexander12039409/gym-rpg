@@ -64,6 +64,24 @@ function parseSave(raw) {
   }
 }
 
+function isKeeper(user) {
+  return String(user && user.name || "").replace(/\s+/g, " ").trim().toLowerCase() === KEEPER_NAME;
+}
+
+function peekSave(key) {
+  try { return parseSave(localStorage.getItem(key)); }
+  catch (e) { return null; }
+}
+
+function findKeeperSave() {
+  const keys = [STORAGE_KEY].concat(OLD_STORAGE_KEYS);
+  for (let i = 0; i < keys.length; i++) {
+    const parsed = peekSave(keys[i]);
+    if (parsed && isKeeper(parsed.user)) return parsed;
+  }
+  return null;
+}
+
 function forgetOldSaves() {
   OLD_STORAGE_KEYS.forEach((k) => {
     try { localStorage.removeItem(k); } catch (e) {}
@@ -74,10 +92,10 @@ function save(opts) {
   state.savedAt = Date.now();
   const raw = JSON.stringify(state);
   try { localStorage.setItem(STORAGE_KEY, raw); } catch (e) {}
-  if (!window.GymTg) return Promise.resolve();
+  if (!window.GymTg) return Promise.resolve(false);
   if (opts && opts.immediate) return GymTg.persistNow(raw);
   GymTg.persist(raw);
-  return Promise.resolve();
+  return Promise.resolve(false);
 }
 
 function load() {
@@ -88,29 +106,37 @@ function load() {
 }
 
 async function hydrate() {
+  const localKeeper = findKeeperSave();
   forgetOldSaves();
-  if (window.GymTg && GymTg.hasCloud()) {
-    try {
-      const cloudRaw = await GymTg.read();
-      const cloudObj = parseSave(cloudRaw);
-      if (cloudObj) {
-        state = Object.assign(emptyState(), cloudObj);
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-        return true;
-      }
-    } catch (e) {
-      console.warn(e);
-      const localObj = parseSave(localStorage.getItem(STORAGE_KEY));
-      if (localObj) {
-        state = Object.assign(emptyState(), localObj);
-        return true;
-      }
-      return false;
-    }
+  try {
+    const cur = peekSave(STORAGE_KEY);
+    if (cur && !isKeeper(cur.user)) localStorage.removeItem(STORAGE_KEY);
+  } catch (e) {}
+  if (localKeeper) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(localKeeper)); } catch (e) {}
   }
-  const localObj = parseSave(localStorage.getItem(STORAGE_KEY));
-  if (!localObj) return false;
-  state = Object.assign(emptyState(), localObj);
+
+  let cloudObj = null;
+  if (window.GymTg && GymTg.hasCloud()) {
+    try { cloudObj = parseSave(await GymTg.read()); } catch (e) { console.warn(e); }
+  }
+  if (cloudObj && !isKeeper(cloudObj.user)) {
+    try { if (window.GymTg) await GymTg.wipe(); } catch (e) {}
+    cloudObj = null;
+  }
+
+  const pick = (() => {
+    if (cloudObj && localKeeper) {
+      return (cloudObj.savedAt || 0) >= (localKeeper.savedAt || 0) ? cloudObj : localKeeper;
+    }
+    return cloudObj || localKeeper;
+  })();
+  if (!pick) return false;
+  state = Object.assign(emptyState(), pick);
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+  if (window.GymTg && GymTg.hasCloud()) {
+    try { await GymTg.persistNow(JSON.stringify(state)); } catch (e) { console.warn(e); }
+  }
   return true;
 }
 
@@ -306,13 +332,11 @@ async function createHero() {
   $("btn-create").disabled = true;
   try {
     const cloudOk = await save({ immediate: true });
-    if (window.GymTg && GymTg.hasCloud()) {
-      if (cloudOk) toast("Герой в облаке Telegram.");
-      else toast("Облако молчит. Сейв только на этом телефоне.", true);
-    }
+    if (cloudOk) toast("Герой в облаке Telegram.");
+    else toast("Облако не записалось. " + ((window.GymTg && GymTg.statusText()) || "Нет Mini App."), true);
     showSummary();
   } catch (e) {
-    toast("Облако не приняло сейв. Если Telegram спросил Allow — разреши и создай ещё раз.", true);
+    toast("Облако ошибка: " + ((e && e.message) || e), true);
     showSummary();
   } finally {
     $("btn-create").disabled = false;
