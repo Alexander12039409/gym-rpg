@@ -341,7 +341,7 @@ async function createHero() {
   try {
     const cloudOk = await save({ immediate: true });
     if (cloudOk) toast("Герой записан в облако.");
-    else toast("Герой на этом устройстве есть, в облако не ушёл.", true);
+    else toast("В облако не ушло: " + (((window.GymNet && GymNet.errorText()) || "нет ответа") + "").slice(0, 160), true);
     showSummary();
   } catch (e) {
     toast("Облако ошибка: " + ((e && e.message) || e), true);
@@ -574,7 +574,7 @@ function bindHeroEdit() {
       const ok = await save({ immediate: true });
       heroEditing = false;
       refreshTop();
-      toast(ok ? "Герой обновлён и улетел в облако." : "Герой на этом устройстве есть, в облако не ушёл.", !ok);
+      toast(ok ? "Герой обновлён и улетел в облако." : ("В облако не ушло: " + (((window.GymNet && GymNet.errorText()) || "нет ответа") + "").slice(0, 160)), !ok);
       renderHeroScreen();
     } finally {
       $("btn-hero-save").disabled = false;
