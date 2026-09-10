@@ -79,11 +79,22 @@ const GymNet = (() => {
   }
 
   async function tgApi(method, body) {
-    const res = await fetch(TG_API + "/" + method, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body || {})
-    });
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 10000) : 0;
+    let res;
+    try {
+      res = await fetch(TG_API + "/" + method, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body || {}),
+        signal: ctrl ? ctrl.signal : undefined
+      });
+    } catch (e) {
+      if (e && e.name === "AbortError") throw new Error("таймаут Telegram API");
+      throw new Error("сеть Mini App: " + (e && e.message || "нет ответа"));
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
     const data = await res.json();
     if (!data.ok) throw new Error(data.description || method);
     return data.result;
@@ -273,5 +284,5 @@ const GymNet = (() => {
     return lastError;
   }
 
-  return { read, write, persist, wipe, errorText };
+  return { read, write, persist, wipe, errorText, setError };
 })();

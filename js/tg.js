@@ -308,8 +308,6 @@ const GymTg = (() => {
     clearTimeout(writeTimer);
     pendingRaw = null;
     await writeNow(raw);
-    const check = await read();
-    if (!check || check.indexOf("\"user\"") < 0) throw new Error("облако не подтвердило сейв. " + diag());
     return true;
   }
 

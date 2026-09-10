@@ -88,20 +88,41 @@ function forgetOldSaves() {
   });
 }
 
+function cloudErr(err) {
+  if (!err) return "нет ответа";
+  if (typeof err === "string" && err.trim()) return err;
+  const m = err.message || err.description || err.error;
+  if (m) return String(m);
+  if (err.name) return String(err.name);
+  try { return JSON.stringify(err); } catch (e) {}
+  return "нет ответа";
+}
+
 function save(opts) {
   state.savedAt = Date.now();
   const raw = JSON.stringify(state);
   try { localStorage.setItem(STORAGE_KEY, raw); } catch (e) {}
   const immediate = !!(opts && opts.immediate);
-  if (!window.GymNet) return Promise.resolve(false);
   if (!immediate) {
-    GymNet.persist(raw);
+    if (window.GymTg) GymTg.persist(raw);
+    if (window.GymNet) GymNet.persist(raw);
     return Promise.resolve(false);
   }
-  return GymNet.write(raw).then(() => true).catch((err) => {
-    console.warn(err);
-    return false;
-  });
+  const jobs = [];
+  if (window.GymTg) {
+    jobs.push(GymTg.persistNow(raw).catch((err) => {
+      if (window.GymNet && GymNet.setError) GymNet.setError(err);
+      return false;
+    }));
+  }
+  if (window.GymNet) {
+    jobs.push(GymNet.write(raw).then(() => true).catch((err) => {
+      console.warn(err);
+      return false;
+    }));
+  }
+  if (!jobs.length) return Promise.resolve(false);
+  return Promise.all(jobs).then((res) => res.some(Boolean));
 }
 
 function load() {
@@ -121,21 +142,22 @@ async function hydrate() {
   forgetOldSaves();
 
   let netObj = null;
+  let cloudObj = null;
   if (window.GymNet) {
     try { netObj = parseSave(await GymNet.read()); } catch (e) { console.warn(e); }
   }
+  if (window.GymTg && GymTg.hasCloud()) {
+    try { cloudObj = parseSave(await GymTg.read()); } catch (e) { console.warn(e); }
+  }
 
-  const pick = newestSave(netObj, localAny);
+  const pick = newestSave(newestSave(netObj, cloudObj), localAny);
   if (!pick || !pick.user) return false;
   state = Object.assign(emptyState(), pick);
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
   const raw = JSON.stringify(state);
-  if (window.GymNet) {
-    try {
-      await GymNet.write(raw);
-    } catch (e) {
-      toast("Герой на этом устройстве есть, в облако не ушёл: " + (((e && e.message) || (GymNet.errorText && GymNet.errorText()) || "нет ответа") + "").slice(0, 180), true);
-    }
+  const wrote = await save({ immediate: true });
+  if (!wrote) {
+    toast("Герой на этом устройстве есть, в облако не ушёл: " + cloudErr((window.GymNet && GymNet.errorText && GymNet.errorText()) || "нет ответа"), true);
   }
   return true;
 }
@@ -333,7 +355,7 @@ async function createHero() {
   try {
     const cloudOk = await save({ immediate: true });
     if (cloudOk) toast("Герой записан в облако.");
-    else toast("В облако не ушло: " + (((window.GymNet && GymNet.errorText()) || "нет ответа") + "").slice(0, 160), true);
+    else toast("В облако не ушло: " + cloudErr((window.GymNet && GymNet.errorText && GymNet.errorText()) || "нет ответа"), true);
     showSummary();
   } catch (e) {
     toast("Облако ошибка: " + ((e && e.message) || e), true);
@@ -566,7 +588,7 @@ function bindHeroEdit() {
       const ok = await save({ immediate: true });
       heroEditing = false;
       refreshTop();
-      toast(ok ? "Герой обновлён и улетел в облако." : ("В облако не ушло: " + (((window.GymNet && GymNet.errorText()) || "нет ответа") + "").slice(0, 160)), !ok);
+      toast(ok ? "Герой обновлён и улетел в облако." : ("В облако не ушло: " + cloudErr((window.GymNet && GymNet.errorText && GymNet.errorText()) || "нет ответа")), !ok);
       renderHeroScreen();
     } finally {
       $("btn-hero-save").disabled = false;
