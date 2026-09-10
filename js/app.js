@@ -89,9 +89,6 @@ function load() {
 
 async function hydrate() {
   forgetOldSaves();
-  if (window.GymTg && GymTg.wipeLegacy) {
-    try { await GymTg.wipeLegacy(); } catch (e) {}
-  }
   if (window.GymTg && GymTg.hasCloud()) {
     try {
       const cloudRaw = await GymTg.read();
@@ -308,8 +305,14 @@ async function createHero() {
   state.currentHp = BOSSES[0].hp;
   $("btn-create").disabled = true;
   try {
-    await save({ immediate: true });
-    if (window.GymTg && GymTg.hasCloud()) toast("Герой в облаке Telegram.");
+    const cloudOk = await save({ immediate: true });
+    if (window.GymTg && GymTg.hasCloud()) {
+      if (cloudOk) toast("Герой в облаке Telegram.");
+      else toast("Облако молчит. Сейв только на этом телефоне.", true);
+    }
+    showSummary();
+  } catch (e) {
+    toast("Облако не приняло сейв. Если Telegram спросил Allow — разреши и создай ещё раз.", true);
     showSummary();
   } finally {
     $("btn-create").disabled = false;
@@ -2025,6 +2028,12 @@ function previewCreate() {
   if (img) img.src = heroImg(fake);
 }
 
+function paintCloudStatus() {
+  const el = $("cloud-status");
+  if (!el || !window.GymTg) return;
+  el.textContent = GymTg.statusText() || "";
+}
+
 async function init() {
   try {
     if (window.GymTg) GymTg.boot();
@@ -2034,14 +2043,19 @@ async function init() {
     renderExpChips();
     previewCreate();
     showScreen("screen-create");
+    paintCloudStatus();
     hideBootVeil();
-    const ok = await hydrate();
-    if (ok) bootApp();
-    else {
-      showScreen("screen-create");
-      renderBodyCarousel();
-      renderExpChips();
-      previewCreate();
+    const applyCloud = async () => {
+      const ok = await hydrate();
+      if (ok) bootApp();
+      return ok;
+    };
+    if (!(await applyCloud()) && window.GymTg && GymTg.hasCloud()) {
+      const retry = async () => {
+        if (state.user) return;
+        await applyCloud();
+      };
+      document.addEventListener("pointerdown", retry, { once: true });
     }
   } finally {
     hideBootVeil();

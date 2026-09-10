@@ -6,8 +6,7 @@ const GymTg = (() => {
   const CHUNK_PREFIX = "gr9c";
   const CHUNK = 3500;
   const WRITE_WAIT = 280;
-  const CALL_MS = 9000;
-  const LEGACY_PREFIXES = ["g8", "g8n", "g8c"];
+  const CALL_MS = 12000;
 
   let pendingRaw = null;
   let writing = false;
@@ -33,14 +32,28 @@ const GymTg = (() => {
     return p && p !== "unknown";
   }
 
+  function cloudReady() {
+    const tg = webApp();
+    if (!tg) return false;
+    try {
+      if (typeof tg.isVersionAtLeast === "function") return tg.isVersionAtLeast("6.9");
+    } catch (e) {}
+    return false;
+  }
+
   function hasCloud() {
     const cs = cloud();
     if (!cs || typeof cs.setItem !== "function" || typeof cs.getItem !== "function") return false;
-    const tg = webApp();
-    try {
-      if (tg && typeof tg.isVersionAtLeast === "function" && !tg.isVersionAtLeast("6.9")) return false;
-    } catch (e) {}
-    return inTelegram();
+    return inTelegram() && cloudReady();
+  }
+
+  function statusText() {
+    if (!inTelegram()) return "";
+    if (!cloudReady()) {
+      return "Telegram не дал облако. Открой приложение через Main Mini App в BotFather, не из обычной ссылки.";
+    }
+    if (hasCloud()) return "Облако Telegram включено. Если спросит Allow — жми.";
+    return "";
   }
 
   function viewportHeight() {
@@ -79,6 +92,7 @@ const GymTg = (() => {
     booted = true;
     try { tg.ready(); } catch (e) {}
     try { tg.expand(); } catch (e) {}
+    try { if (typeof tg.enableClosingConfirmation === "function") tg.enableClosingConfirmation(); } catch (e) {}
     try { tg.setHeaderColor("#ffcc22"); } catch (e) {}
     try { tg.setBackgroundColor("#1a2748"); } catch (e) {}
     document.documentElement.classList.add("tg-app");
@@ -109,27 +123,27 @@ const GymTg = (() => {
         return;
       }
       let done = false;
-      const timer = setTimeout(() => {
-        if (done) return;
-        done = true;
-        reject(new Error("CloudStorage timeout"));
-      }, CALL_MS);
-      const list = args.slice();
-      list.push((err, value) => {
+      const finish = (fn) => {
         if (done) return;
         done = true;
         clearTimeout(timer);
-        const out = unwrapCallback(err, value);
-        if (out.error) reject(out.error);
-        else resolve(out.value);
+        fn();
+      };
+      const timer = setTimeout(() => {
+        finish(() => reject(new Error("CloudStorage timeout")));
+      }, CALL_MS);
+      const list = args.slice();
+      list.push((err, value) => {
+        finish(() => {
+          const out = unwrapCallback(err, value);
+          if (out.error) reject(out.error);
+          else resolve(out.value);
+        });
       });
       try {
         cs[method].apply(cs, list);
       } catch (e) {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        reject(e);
+        finish(() => reject(e));
       }
     });
   }
@@ -157,18 +171,6 @@ const GymTg = (() => {
     return Array.isArray(keys) ? keys : [];
   }
 
-  async function wipeLegacy() {
-    if (!hasCloud()) return;
-    try {
-      const keys = await getAllKeys();
-      const drop = keys.filter((k) => {
-        const s = String(k);
-        return s === "g8n" || s.indexOf("g8c") === 0 || s === "g8" || LEGACY_PREFIXES.some((p) => s.indexOf(p) === 0);
-      });
-      if (drop.length) await removeItems(drop);
-    } catch (e) {}
-  }
-
   async function read() {
     if (!hasCloud()) return null;
     try {
@@ -191,18 +193,9 @@ const GymTg = (() => {
   }
 
   async function writeNow(raw) {
-    if (!hasCloud() || raw == null) return;
+    if (!hasCloud() || raw == null) throw new Error("CloudStorage недоступен");
     if (raw.length <= CHUNK) {
       await setItem(DATA_KEY, raw);
-      try {
-        const oldN = parseInt(await getItem(META_KEY), 10) || 0;
-        const extra = [];
-        if (oldN) {
-          extra.push(META_KEY);
-          for (let i = 0; i < oldN; i++) extra.push(CHUNK_PREFIX + i);
-        }
-        if (extra.length) await removeItems(extra);
-      } catch (e) {}
       return;
     }
     const chunks = [];
@@ -227,7 +220,7 @@ const GymTg = (() => {
       if (typeof toast === "function") toast("Telegram не сохранил облако. Нажми Allow, если спросит.", true);
     } finally {
       writing = false;
-      if (pendingRaw != null) runWriteQueue();
+      if (pendingRaw != null) await runWriteQueue();
     }
   }
 
@@ -235,14 +228,17 @@ const GymTg = (() => {
     if (!hasCloud()) return;
     pendingRaw = raw;
     clearTimeout(writeTimer);
-    writeTimer = setTimeout(runWriteQueue, WRITE_WAIT);
+    writeTimer = setTimeout(() => { runWriteQueue(); }, WRITE_WAIT);
   }
 
-  function persistNow(raw) {
-    if (!hasCloud()) return Promise.resolve();
-    pendingRaw = raw;
+  async function persistNow(raw) {
+    if (!hasCloud()) return false;
     clearTimeout(writeTimer);
-    return runWriteQueue();
+    pendingRaw = null;
+    await writeNow(raw);
+    const check = await read();
+    if (!check || check.indexOf("\"user\"") < 0) throw new Error("облако не подтвердило сейв");
+    return true;
   }
 
   function flush() {
@@ -258,17 +254,17 @@ const GymTg = (() => {
       const keys = await getAllKeys();
       const drop = keys.filter((k) => {
         const s = String(k);
-        return s === DATA_KEY || s === META_KEY || s.indexOf(CHUNK_PREFIX) === 0 || s === "g8n" || s.indexOf("g8c") === 0;
+        return s === DATA_KEY || s === META_KEY || s.indexOf(CHUNK_PREFIX) === 0;
       });
       if (drop.length) await removeItems(drop);
-      else await removeItems([DATA_KEY, META_KEY, CHUNK_PREFIX + "0"]);
+      else await removeItems([DATA_KEY, META_KEY]);
     } catch (err) {
       console.warn("GymTg wipe", err);
     }
   }
 
   return {
-    boot, inTelegram, hasCloud, read, persist, persistNow, flush, wipe, wipeLegacy,
+    boot, inTelegram, hasCloud, cloudReady, statusText, read, persist, persistNow, flush, wipe,
     viewportHeight, applyChrome, setSwipeLock
   };
 })();
