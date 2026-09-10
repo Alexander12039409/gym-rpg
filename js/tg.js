@@ -30,14 +30,20 @@ const GymTg = (() => {
 
   function inTelegram() {
     if (window.TelegramWebviewProxy) return true;
+    if (typeof window.TelegramWebview !== "undefined") return true;
+    if (/Telegram/i.test(navigator.userAgent || "")) return true;
     const tg = webApp();
-    if (!tg) return false;
-    if (tg.initData) return true;
-    if (tg.initDataUnsafe && tg.initDataUnsafe.user) return true;
-    const p = String(tg.platform || "");
-    if (p && p !== "unknown") return true;
+    if (tg) {
+      if (tg.initData) return true;
+      if (tg.initDataUnsafe && tg.initDataUnsafe.user) return true;
+      const p = String(tg.platform || "");
+      if (p && p !== "unknown") return true;
+      if (tg.themeParams && Object.keys(tg.themeParams).length) return true;
+    }
     const wv = webView();
-    return !!(wv && wv.initParams && wv.initParams.tgWebAppData);
+    if (wv && wv.initParams && (wv.initParams.tgWebAppData || wv.initParams.tgWebAppVersion)) return true;
+    try { if (window.parent && window.parent !== window) return true; } catch (e) { return true; }
+    return false;
   }
 
   function diag() {
@@ -51,7 +57,8 @@ const GymTg = (() => {
   }
 
   function hasCloud() {
-    return inTelegram() && !!(cloud() || (webView() && typeof webView().postEvent === "function") || window.TelegramWebviewProxy);
+    if (!(cloud() || window.TelegramWebviewProxy || (webView() && typeof webView().postEvent === "function"))) return false;
+    return inTelegram();
   }
 
   function statusText() {

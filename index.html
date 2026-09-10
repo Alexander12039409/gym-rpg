@@ -2,14 +2,23 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
+  <script>
+  (function () {
+    var p = location.pathname || "";
+    if (p.length > 1 && p.charAt(p.length - 1) !== "/" && !/index\.html$/i.test(p)) {
+      location.replace(p + "/" + (location.search || "") + (location.hash || ""));
+    }
+  })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, interactive-widget=overlays-content" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Gym RPG — Качалка</title>
   <meta name="theme-color" content="#ffcc22" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Unbounded:wght@700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=22" />
+  <link rel="stylesheet" href="css/style.css?v=23" />
 </head>
 <body>
 <div id="boot-veil" class="boot-veil">Грузим героя…</div>
@@ -275,7 +284,7 @@
 </div>
 
 <script src="js/data.js?v=12"></script>
-<script src="js/tg.js?v=4"></script>
-<script src="js/app.js?v=23"></script>
+<script src="js/tg.js?v=5"></script>
+<script src="js/app.js?v=24"></script>
 </body>
 </html>

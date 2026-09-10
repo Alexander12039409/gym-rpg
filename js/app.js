@@ -333,7 +333,7 @@ async function createHero() {
   try {
     const cloudOk = await save({ immediate: true });
     if (cloudOk) toast("Герой в облаке Telegram.");
-    else toast("Облако не записалось. " + ((window.GymTg && GymTg.statusText()) || "Нет Mini App."), true);
+    else toast("Облако не записалось. " + ((window.GymTg && typeof GymTg.statusText === "function" && GymTg.statusText()) || ("GymTg=" + typeof window.GymTg)), true);
     showSummary();
   } catch (e) {
     toast("Облако ошибка: " + ((e && e.message) || e), true);
