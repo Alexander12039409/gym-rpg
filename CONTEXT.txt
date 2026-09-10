@@ -9,9 +9,10 @@ Gym RPG v4 — контекст для следующего чата
 - v3 (архив, не трогать): E:\gym app\gym-rpg-v3\  ключ gymRpgV7, порт 8766
 - v2: E:\gym app\gym-rpg-v2\  ключ gymRpgV6, порт 8765
 - v1: E:\gym app\  ключ gymRpgV4
-- Сохранение v4: localStorage ключ gymRpgV8 (старые ключи не подхватятся)
-- Telegram Mini App: js/tg.js + telegram-web-app.js. В WebView сейв ещё пишется в CloudStorage бота (чанки g8n/g8c*). Инструкция: TELEGRAM.md.
-- Кросс-девайс работает только внутри Mini App одного и того же бота + того же Telegram-аккаунта. Браузер без Telegram = только localStorage.
+- Сохранение v4: localStorage ключ gymRpgV9 (v8 и старше стираются при входе).
+- Telegram Mini App: js/tg.js + telegram-web-app.js. В WebView сейв в CloudStorage бота, ключ gr9d (старые g8* чистятся). Инструкция: TELEGRAM.md.
+- Кросс-девайс: CloudStorage этого бота + тот же Telegram-аккаунт. Браузер без Telegram = только localStorage.
+- Создание героя ждёт persistNow, иначе iOS убивает Mini App до записи в облако.
 
 ЧТО ЭТО
 Логер тренировок в шкуре RPG. Сет = удар по боссу. HTML+CSS+JS, графика в assets/.

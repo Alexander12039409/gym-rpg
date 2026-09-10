@@ -64,11 +64,20 @@ function parseSave(raw) {
   }
 }
 
-function save() {
+function forgetOldSaves() {
+  OLD_STORAGE_KEYS.forEach((k) => {
+    try { localStorage.removeItem(k); } catch (e) {}
+  });
+}
+
+function save(opts) {
   state.savedAt = Date.now();
   const raw = JSON.stringify(state);
   try { localStorage.setItem(STORAGE_KEY, raw); } catch (e) {}
-  if (window.GymTg) GymTg.persist(raw);
+  if (!window.GymTg) return Promise.resolve();
+  if (opts && opts.immediate) return GymTg.persistNow(raw);
+  GymTg.persist(raw);
+  return Promise.resolve();
 }
 
 function load() {
@@ -79,23 +88,32 @@ function load() {
 }
 
 async function hydrate() {
-  const localObj = parseSave(localStorage.getItem(STORAGE_KEY));
-  let cloudRaw = null;
+  forgetOldSaves();
+  if (window.GymTg && GymTg.wipeLegacy) {
+    try { await GymTg.wipeLegacy(); } catch (e) {}
+  }
   if (window.GymTg && GymTg.hasCloud()) {
-    try { cloudRaw = await GymTg.read(); } catch (e) { console.warn(e); }
+    try {
+      const cloudRaw = await GymTg.read();
+      const cloudObj = parseSave(cloudRaw);
+      if (cloudObj) {
+        state = Object.assign(emptyState(), cloudObj);
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+        return true;
+      }
+    } catch (e) {
+      console.warn(e);
+      const localObj = parseSave(localStorage.getItem(STORAGE_KEY));
+      if (localObj) {
+        state = Object.assign(emptyState(), localObj);
+        return true;
+      }
+      return false;
+    }
   }
-  const cloudObj = parseSave(cloudRaw);
-  let pick = null;
-  if (localObj && cloudObj) {
-    pick = (cloudObj.savedAt || 0) >= (localObj.savedAt || 0) ? cloudObj : localObj;
-  } else {
-    pick = cloudObj || localObj;
-  }
-  if (!pick) return false;
-  state = Object.assign(emptyState(), pick);
-  const raw = JSON.stringify(state);
-  try { localStorage.setItem(STORAGE_KEY, raw); } catch (e) {}
-  if (window.GymTg && GymTg.hasCloud() && raw !== cloudRaw) GymTg.persist(raw);
+  const localObj = parseSave(localStorage.getItem(STORAGE_KEY));
+  if (!localObj) return false;
+  state = Object.assign(emptyState(), localObj);
   return true;
 }
 
@@ -173,6 +191,7 @@ function showView(name) {
     b.classList.toggle("on", b.dataset.view === name);
   });
   $("view-" + name).classList.add("on");
+  if (window.GymTg && GymTg.setSwipeLock) GymTg.setSwipeLock(name === "map");
   if (name === "map") renderMap();
   if (name === "plans") renderPlans();
   if (name === "path") renderPath();
@@ -264,7 +283,7 @@ function renderExpChips() {
   note.textContent = cur.text;
 }
 
-function createHero() {
+async function createHero() {
   const name = $("char-name").value.trim() || "Безымянный";
   const weight = parseFloat($("char-weight").value) || 75;
   const height = parseFloat($("char-height").value) || 175;
@@ -287,8 +306,14 @@ function createHero() {
   };
   state.currentBoss = 0;
   state.currentHp = BOSSES[0].hp;
-  save();
-  showSummary();
+  $("btn-create").disabled = true;
+  try {
+    await save({ immediate: true });
+    if (window.GymTg && GymTg.hasCloud()) toast("Герой в облаке Telegram.");
+    showSummary();
+  } finally {
+    $("btn-create").disabled = false;
+  }
 }
 
 function summaryHtml(user, opts) {
@@ -446,6 +471,7 @@ function renderHeroScreen() {
   });
   $("btn-reset").addEventListener("click", async () => {
     if (!confirm("Снести героя, планы и летопись?")) return;
+    forgetOldSaves();
     localStorage.removeItem(STORAGE_KEY);
     if (window.GymTg) await GymTg.wipe();
     location.reload();
@@ -2007,6 +2033,8 @@ async function init() {
     renderBodyCarousel();
     renderExpChips();
     previewCreate();
+    showScreen("screen-create");
+    hideBootVeil();
     const ok = await hydrate();
     if (ok) bootApp();
     else {

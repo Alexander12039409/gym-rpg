@@ -135,7 +135,22 @@ button, input, select, textarea {
 .screen { display: none; height: 100%; }
 .screen.on { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 
-#screen-create, #screen-summary, #screen-hero { overflow: auto; background: var(--paper); scroll-padding: 20px 12px 80px; }
+#screen-create, #screen-summary, #screen-hero {
+  overflow: hidden;
+  background: var(--paper);
+}
+#screen-create .create-wrap,
+#screen-summary .create-wrap,
+#screen-hero .create-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  padding: max(16px, var(--safe-t)) 16px max(28px, var(--safe-b));
+}
 #screen-app { height: 100%; min-height: 0; overflow: hidden; background: var(--navy); }
 #screen-app main {
   flex: 1;
@@ -229,6 +244,8 @@ label.lbl {
 .create-wrap {
   padding: 20px 18px 32px;
   overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   background:
     radial-gradient(circle at 80% -10%, rgba(255,204,34,.45) 0%, transparent 40%),
     radial-gradient(circle at 0% 100%, rgba(226,61,61,.2) 0%, transparent 35%),
@@ -1238,21 +1255,21 @@ label.lbl {
 .zone { font-size: 12px; }
 
 .body-carousel {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 10px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  padding: 4px 2px 14px;
-  margin: 0 -6px 8px;
-  scrollbar-width: none;
+  overflow: visible;
+  padding: 0;
+  margin: 0 0 12px;
 }
 .body-carousel::-webkit-scrollbar { display: none; }
 .body-card {
-  flex: 0 0 78%;
-  max-width: 280px;
-  scroll-snap-align: center;
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  grid-template-rows: auto auto auto;
+  column-gap: 10px;
+  width: 100%;
+  max-width: none;
   background: #fff;
   border: 3px solid var(--ink);
   border-radius: 18px;
@@ -1262,13 +1279,17 @@ label.lbl {
   box-shadow: 0 4px 0 var(--ink);
   color: inherit;
   font: inherit;
+  -webkit-transform: none;
+  transform: none;
 }
 .body-card.on {
   background: var(--gold);
   box-shadow: 0 4px 0 var(--ink), 0 0 0 3px var(--lime);
 }
 .body-card img {
-  width: 100%;
+  grid-row: 1 / span 3;
+  width: 92px;
+  height: 92px;
   aspect-ratio: 1;
   object-fit: cover;
   border-radius: 12px;
@@ -1277,10 +1298,12 @@ label.lbl {
   display: block;
 }
 .body-card h3 {
-  margin: 8px 0 4px;
+  grid-column: 2;
+  margin: 0 0 4px;
   font-size: 16px;
 }
 .body-card .fat-row {
+  grid-column: 2;
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
@@ -1298,6 +1321,7 @@ label.lbl {
 }
 .body-card.on .chip { background: #fff; }
 .body-card p {
+  grid-column: 2;
   margin: 0;
   font-size: 12px;
   font-weight: 700;

@@ -1,6 +1,7 @@
 /* Gym RPG v4 — данные. Без import, чтобы file:// работал. */
 
-const STORAGE_KEY = "gymRpgV8";
+const STORAGE_KEY = "gymRpgV9";
+const OLD_STORAGE_KEYS = ["gymRpgV8", "gymRpgV7", "gymRpgV6", "gymRpgV4"];
 const NUDGE_AFTER_DAYS = 4;
 
 const BOSSES = [
