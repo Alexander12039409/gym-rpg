@@ -1,0 +1,8 @@
+/save
+  Cache-Control: no-store
+
+/*.html
+  Cache-Control: no-store
+
+/js/*
+  Cache-Control: no-store

@@ -1,0 +1,7 @@
+name = "gym-rpg"
+compatibility_date = "2025-09-01"
+pages_build_output_dir = "."
+
+[[kv_namespaces]]
+binding = "SAVES"
+id = "cd424dd7ddf94261b15783940380068a"

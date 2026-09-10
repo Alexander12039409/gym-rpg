@@ -102,27 +102,16 @@ function save(opts) {
   state.savedAt = Date.now();
   const raw = JSON.stringify(state);
   try { localStorage.setItem(STORAGE_KEY, raw); } catch (e) {}
+  if (!window.GymNet) return Promise.resolve(false);
   const immediate = !!(opts && opts.immediate);
   if (!immediate) {
-    if (window.GymTg) GymTg.persist(raw);
-    if (window.GymNet) GymNet.persist(raw);
+    GymNet.persist(raw);
     return Promise.resolve(false);
   }
-  const jobs = [];
-  if (window.GymTg) {
-    jobs.push(GymTg.persistNow(raw).catch((err) => {
-      if (window.GymNet && GymNet.setError) GymNet.setError(err);
-      return false;
-    }));
-  }
-  if (window.GymNet) {
-    jobs.push(GymNet.write(raw).then(() => true).catch((err) => {
-      console.warn(err);
-      return false;
-    }));
-  }
-  if (!jobs.length) return Promise.resolve(false);
-  return Promise.all(jobs).then((res) => res.some(Boolean));
+  return GymNet.write(raw).catch((err) => {
+    console.warn(err);
+    return false;
+  });
 }
 
 function load() {
@@ -142,27 +131,17 @@ async function hydrate() {
   forgetOldSaves();
 
   let netObj = null;
-  let cloudObj = null;
-  for (let i = 0; i < 5; i++) {
-    if (window.GymNet) {
-      try { netObj = parseSave(await GymNet.read()); } catch (e) { console.warn(e); }
-    }
-    if (window.GymTg) {
-      try { cloudObj = parseSave(await GymTg.read()); } catch (e) { console.warn(e); }
-    }
-    if ((netObj && netObj.user) || (cloudObj && cloudObj.user) || (localAny && localAny.user && i === 4)) break;
-    if (netObj && netObj.user) break;
-    if (cloudObj && cloudObj.user) break;
-    await new Promise((resolve) => setTimeout(resolve, 350));
+  if (window.GymNet) {
+    try { netObj = parseSave(await GymNet.read()); } catch (e) { console.warn(e); }
   }
 
-  const pick = newestSave(newestSave(netObj, cloudObj), localAny);
+  const pick = newestSave(netObj, localAny);
   if (!pick || !pick.user) return false;
   state = Object.assign(emptyState(), pick);
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
   const wrote = await save({ immediate: true });
   if (!wrote) {
-    toast("Герой на этом устройстве есть, в облако не ушёл: " + cloudErr((window.GymNet && GymNet.errorText && GymNet.errorText()) || "нет ответа"), true);
+    toast("Герой тут есть, на сервер не ушёл: " + cloudErr((window.GymNet && GymNet.errorText && GymNet.errorText()) || "нет ответа"), true);
   }
   return true;
 }
@@ -359,11 +338,11 @@ async function createHero() {
   $("btn-create").disabled = true;
   try {
     const cloudOk = await save({ immediate: true });
-    if (cloudOk) toast("Герой записан в облако.");
-    else toast("В облако не ушло: " + cloudErr((window.GymNet && GymNet.errorText && GymNet.errorText()) || "нет ответа"), true);
+    if (cloudOk) toast("Герой записан на сервер.");
+    else toast("На сервер не ушло: " + cloudErr((window.GymNet && GymNet.errorText && GymNet.errorText()) || "нет ответа"), true);
     showSummary();
   } catch (e) {
-    toast("Облако ошибка: " + ((e && e.message) || e), true);
+    toast("Сервер: " + ((e && e.message) || e), true);
     showSummary();
   } finally {
     $("btn-create").disabled = false;
@@ -527,7 +506,6 @@ function renderHeroScreen() {
     if (!confirm("Снести героя, планы и летопись?")) return;
     forgetOldSaves();
     localStorage.removeItem(STORAGE_KEY);
-    if (window.GymTg) await GymTg.wipe();
     if (window.GymNet) await GymNet.wipe();
     location.reload();
   });
@@ -593,7 +571,7 @@ function bindHeroEdit() {
       const ok = await save({ immediate: true });
       heroEditing = false;
       refreshTop();
-      toast(ok ? "Герой обновлён и улетел в облако." : ("В облако не ушло: " + cloudErr((window.GymNet && GymNet.errorText && GymNet.errorText()) || "нет ответа")), !ok);
+      toast(ok ? "Герой обновлён и записан на сервер." : ("На сервер не ушло: " + cloudErr((window.GymNet && GymNet.errorText && GymNet.errorText()) || "нет ответа")), !ok);
       renderHeroScreen();
     } finally {
       $("btn-hero-save").disabled = false;
@@ -2090,18 +2068,15 @@ function paintCloudStatus() {
   if (!el) return;
   const netErr = window.GymNet && typeof GymNet.errorText === "function" && GymNet.errorText();
   if (netErr) {
-    el.textContent = "Облако: " + netErr;
+    el.textContent = "Сервер: " + netErr;
     return;
   }
-  if (window.GymTg) el.textContent = GymTg.statusText() || "";
+  el.textContent = "Сейв на своём сервере. Telegram только открывает качалку.";
 }
 
 async function init() {
   try {
     if (window.GymTg) GymTg.boot();
-    if (window.GymPurge) {
-      try { await GymPurge.run(); } catch (e) { console.warn(e); }
-    }
     lockViewport();
     bind();
     renderBodyCarousel();
