@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, interactive-widget=overlays-content" />
+  <title>Gym RPG — Качалка</title>
+  <meta name="theme-color" content="#ffcc22" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Unbounded:wght@700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css?v=19" />
+</head>
+<body>
+<div id="boot-veil" class="boot-veil">Грузим героя…</div>
+<div class="app">
+  <div id="toast"></div>
+  <div class="backdrop" id="backdrop"></div>
+
+  <section id="screen-create" class="screen">
+    <div class="create-wrap">
+      <div class="create-hero"><img id="create-preview" src="assets/hero/m-start-beer.png" alt="" /></div>
+      <h2 class="display" style="text-align:center;margin:0 0 6px">Генерация туши</h2>
+      <p class="muted" style="text-align:center;margin-bottom:14px">Альтер-эго для зала. Пол, цель и проблемные зоны задают стартовый портрет и путь.</p>
+      <label class="lbl">Имя / погоняло</label>
+      <input class="field" id="char-name" placeholder="Как тебя звать в качалке" enterkeyhint="done" autocomplete="nickname" />
+      <label class="lbl">Пол</label>
+      <div class="row2">
+        <button type="button" class="sex on" data-sex="m">Мужик</button>
+        <button type="button" class="sex" data-sex="f">Женщина</button>
+      </div>
+      <div class="row2">
+        <div class="grow">
+          <label class="lbl">Вес, кг</label>
+          <input class="field" id="char-weight" type="number" min="30" max="250" inputmode="decimal" enterkeyhint="done" placeholder="75" />
+        </div>
+        <div class="grow">
+          <label class="lbl">Рост, см</label>
+          <input class="field" id="char-height" type="number" min="120" max="230" inputmode="numeric" enterkeyhint="done" placeholder="175" />
+        </div>
+      </div>
+      <label class="lbl">Выбери, на кого ты похож</label>
+      <p class="muted" style="margin:0 0 8px">Выбери максимально похожий вид твоей фигуры. Цифры примерные — не DEXA, а ориентир.</p>
+      <div class="body-carousel" id="body-carousel"></div>
+      <label class="lbl">Тренировочный стаж</label>
+      <div class="exp-chips" id="exp-chips"></div>
+      <p class="exp-note" id="exp-note"></p>
+      <label class="lbl">Цель</label>
+      <select class="field" id="char-goal">
+        <option value="gain">Стать машиной (набор)</option>
+        <option value="lose">Просушиться (рельеф)</option>
+        <option value="fit">Перестать задыхаться (тонус)</option>
+      </select>
+      <label class="lbl">Проблемные зоны (можно несколько)</label>
+      <div class="zones">
+        <button type="button" class="zone" data-zone="beer">Пивной живот</button>
+        <button type="button" class="zone" data-zone="puzo">Пузико</button>
+        <button type="button" class="zone" data-zone="butt">Обвисшая задница</button>
+        <button type="button" class="zone" data-zone="arms">Руки-макаронины</button>
+        <button type="button" class="zone" data-zone="legs">Куриные ножки</button>
+        <button type="button" class="zone" data-zone="slouch">Сутулая псина</button>
+        <button type="button" class="zone" data-zone="chest">Впалая грудь</button>
+        <button type="button" class="zone" data-zone="neck">Третий подбородок</button>
+      </div>
+      <button class="btn" id="btn-create">Создать героя</button>
+    </div>
+  </section>
+
+  <section id="screen-summary" class="screen">
+    <div class="create-wrap" id="summary-wrap"></div>
+  </section>
+
+  <section id="screen-hero" class="screen">
+    <div class="create-wrap" id="hero-screen-wrap"></div>
+  </section>
+
+  <section id="screen-app" class="screen">
+    <header class="topbar" id="topbar" role="button" tabindex="0" aria-label="Открыть героя">
+      <img class="hero-mini" id="top-hero" alt="Герой" />
+      <div class="who">
+        <b id="top-name">Герой</b>
+        <span id="top-title">Ур. 1</span>
+        <div class="xp-mini"><i id="top-xp"></i></div>
+      </div>
+    </header>
+    <main>
+      <div id="view-map" class="view on">
+        <div class="map-scroll" id="world-scroll">
+          <div class="world" id="world"></div>
+        </div>
+        <div class="map-cta">
+          <button class="btn pink" id="btn-raid">В бой с текущим боссом</button>
+        </div>
+      </div>
+
+      <div id="view-plans" class="view">
+        <div class="pad">
+          <h2 class="display" style="margin:0 0 4px;font-size:20px">Планы</h2>
+          <p class="muted" style="margin:0 0 10px">Собери планы заранее. Перед боем выберешь план и день в шторке.</p>
+          <div id="plans-list"></div>
+          <div class="card compact">
+            <h3>Новый план</h3>
+            <input class="field" id="plan-name" placeholder="Название плана" enterkeyhint="done" />
+            <textarea class="field" id="plan-desc" placeholder="Зачем этот план (необязательно)"></textarea>
+            <button class="btn" id="btn-add-plan">Создать план</button>
+            <button class="btn ghost" id="btn-template">Вставить шаблон «База»</button>
+          </div>
+          <div class="card compact" id="program-packs"></div>
+        </div>
+      </div>
+
+      <div id="view-path" class="view">
+        <div class="pad">
+          <div class="seg" id="path-tabs">
+            <button type="button" data-ptab="xp" class="on">Прокачка</button>
+            <button type="button" data-ptab="kills">Трофеи</button>
+          </div>
+          <div id="path-root"></div>
+        </div>
+      </div>
+
+      <div id="view-cal" class="view">
+        <div class="pad">
+          <div class="cal-head">
+            <button class="btn tiny ghost" id="cal-prev">←</button>
+            <h2 class="display" id="cal-label" style="margin:0;font-size:16px"></h2>
+            <button class="btn tiny ghost" id="cal-next">→</button>
+          </div>
+          <div class="cal-grid" id="cal-grid"></div>
+          <div id="cal-day-log" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <div id="view-log" class="view">
+        <div class="pad">
+          <h2 class="display" style="margin:0 0 8px;font-size:20px">Летопись</h2>
+          <div id="history-list"></div>
+        </div>
+      </div>
+    </main>
+    <nav class="bottom-nav">
+      <button type="button" data-view="map" class="on" aria-label="Карта">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19c3-6 4-3 8-9 3 4 4 1 8 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="7" cy="8" r="2.2" fill="currentColor"/><circle cx="17" cy="16" r="2.2" fill="currentColor"/></svg>
+        <span>Карта</span>
+      </button>
+      <button type="button" data-view="plans" aria-label="Планы">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        <span>Планы</span>
+      </button>
+      <button type="button" data-view="path" aria-label="Путь">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.1 4.4 4.9.6-3.6 3.4.9 4.8L12 14.2 7.7 16.8l.9-4.8L5 8l4.9-.6z" fill="currentColor"/></svg>
+        <span>Путь</span>
+      </button>
+      <button type="button" data-view="cal" aria-label="Календарь">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M8 3v4M16 3v4M4 10h16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        <span>Календарь</span>
+      </button>
+      <button type="button" data-view="log" aria-label="Журнал">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h10a3 3 0 013 3v13H8a2 2 0 01-2-2V4z" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M9 9h7M9 13h7M9 17h4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        <span>Журнал</span>
+      </button>
+    </nav>
+  </section>
+
+  <section id="screen-battle" class="screen">
+    <div class="arena" id="fpv">
+      <div class="arena-hud">
+        <div class="hp stamina"><i id="stamina-fill"></i><b id="stamina-text">100</b></div>
+        <span class="deload-pill" id="deload-flag" hidden>Разгрузка</span>
+        <button class="btn tiny ghost finish-raid" id="btn-finish" type="button">Завершить</button>
+      </div>
+      <div class="boss-stage" id="boss-hitbox">
+        <img id="battle-boss" class="boss-fpv" alt="Босс" />
+        <div class="blood-layer" id="blood-layer"></div>
+        <div class="boss-inscribe" id="battle-boss-name"><span>Босс</span></div>
+      </div>
+      <div class="hp boss-hp"><i id="hp-fill"></i><b id="hp-text">0 / 0</b></div>
+    </div>
+    <div class="battle-dock">
+      <p class="muted battle-meta" id="battle-day-meta"></p>
+      <div class="deck-head">
+        <button class="btn tiny ghost" id="deck-prev" type="button">‹</button>
+        <div class="deck-dots" id="deck-dots"></div>
+        <button class="btn tiny ghost" id="deck-next" type="button">›</button>
+      </div>
+      <div class="ex-deck" id="deck"></div>
+      <div class="hit-bar">
+        <button class="btn pink" id="btn-hit" type="button">Нанести урон</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="sheet" id="sheet-finish">
+    <div class="grab"></div>
+    <h2 class="display" style="margin:0 0 8px;font-size:20px">Завершить рейд?</h2>
+    <p>Вы уверены что нужно завершить рейд? Босс ещё может получить.</p>
+    <button class="btn pink" id="btn-finish-yes">Уверен, ему хватит</button>
+    <button class="btn ghost" id="btn-finish-no">Ещё добью</button>
+  </div>
+
+  <div class="modal" id="modal-results" style="max-height:86vh;overflow:auto">
+    <h2 class="display" style="margin-top:0">Результаты рейда</h2>
+    <div id="results-body"></div>
+    <button class="btn lime" id="btn-results-ok">На карту</button>
+  </div>
+
+  <div class="sheet" id="sheet">
+    <div class="grab"></div>
+    <h2 class="display" style="margin:0 0 8px;font-size:20px">Стиль боя</h2>
+    <p class="muted" id="sheet-boss"></p>
+    <label class="lbl">План</label>
+    <div id="sheet-plans"></div>
+    <label class="lbl">День</label>
+    <div id="sheet-days"></div>
+    <label class="check"><input type="checkbox" id="sheet-deload" /> Разгрузочная тренировка (штраф за тот же вес выключен)</label>
+    <button class="btn pink" id="btn-start-battle">Ворваться</button>
+    <button class="btn ghost" id="btn-sheet-close">Струсить</button>
+  </div>
+
+  <div class="modal" id="modal-reward">
+    <h2 class="display" id="reward-title" style="margin-top:0">Босс пал</h2>
+    <p id="reward-body"></p>
+    <button class="btn lime" id="btn-reward-ok">Отлично</button>
+  </div>
+
+  <div class="modal" id="modal-event">
+    <h2 class="display" id="event-title" style="margin-top:0">Событие</h2>
+    <p id="event-text"></p>
+    <button class="btn" id="btn-event-ok">Принял</button>
+  </div>
+
+  <div class="modal" id="modal-day" style="max-height:86vh;overflow:auto">
+    <h2 class="display" id="day-modal-title" style="margin-top:0">День</h2>
+    <label class="lbl">Название дня</label>
+    <input class="field" id="day-name" placeholder="Например: Жимный" enterkeyhint="done" />
+    <label class="lbl">Описание дня</label>
+    <textarea class="field" id="day-desc" placeholder="Зачем этот день"></textarea>
+    <h3 class="day-sec">Упражнения</h3>
+    <div id="day-ex-list"></div>
+    <button class="btn ghost" id="btn-add-ex">+ Упражнение</button>
+    <div class="flex" style="margin-top:10px">
+      <button class="btn ghost" id="btn-day-cancel">Отмена</button>
+      <button class="btn" id="btn-day-save">Сохранить</button>
+    </div>
+  </div>
+
+  <div class="modal" id="modal-nudge">
+    <h2 class="display" style="margin-top:0">Время качаться, соберись</h2>
+    <blockquote class="quote" id="nudge-quote"></blockquote>
+    <p class="quote-src" id="nudge-source"></p>
+    <button class="btn lime" id="btn-nudge-ok">Я помню</button>
+    <button class="btn ghost" id="btn-nudge-weak">Я слабый гой</button>
+  </div>
+</div>
+
+<div id="kb-layer" class="kb-layer" aria-hidden="true">
+  <div class="kb-sheet" id="kb-sheet">
+    <div class="kb-sheet-head" id="kb-sheet-head"></div>
+    <div class="kb-sheet-body" id="kb-sheet-body">
+      <div id="kb-proxy"></div>
+      <div id="kb-hit" hidden>
+        <div class="row2">
+          <input class="field" id="hit-w" type="text" inputmode="text" enterkeyhint="next" placeholder="Вес, кг · 20+20" />
+          <input class="field" id="hit-r" type="text" inputmode="text" enterkeyhint="go" placeholder="Повторы · 8+2" />
+        </div>
+        <label class="check" id="hit-bw-wrap" hidden>
+          <input type="checkbox" id="hit-bw" /> Со своим весом
+        </label>
+        <button class="btn pink" id="btn-hit-go" type="button">Нанести урон</button>
+      </div>
+    </div>
+  </div>
+  <button type="button" class="kb-veil" id="kb-veil" tabindex="-1" aria-label="Закрыть клавиатуру"></button>
+</div>
+
+<script src="js/data.js?v=10"></script>
+<script src="js/tg.js?v=1"></script>
+<script src="js/app.js?v=20"></script>
+</body>
+</html>
