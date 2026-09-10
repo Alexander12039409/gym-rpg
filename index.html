@@ -7,6 +7,21 @@
     var p = location.pathname || "";
     if (p.length > 1 && p.charAt(p.length - 1) !== "/" && !/index\.html$/i.test(p)) {
       location.replace(p + "/" + (location.search || "") + (location.hash || ""));
+      return;
+    }
+    var base = "";
+    if (location.protocol !== "file:") {
+      if (/github\.io$/i.test(location.hostname)) base = "/gym-rpg/";
+      else {
+        base = p.replace(/index\.html$/i, "");
+        if (!base || base.charAt(base.length - 1) !== "/") base += "/";
+      }
+    }
+    window.GYM_BASE = base;
+    if (base) {
+      var el = document.createElement("base");
+      el.href = base;
+      document.head.appendChild(el);
     }
   })();
   </script>
@@ -18,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Unbounded:wght@700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=23" />
+  <link rel="stylesheet" href="css/style.css?v=24" />
 </head>
 <body>
 <div id="boot-veil" class="boot-veil">Грузим героя…</div>
@@ -283,8 +298,8 @@
   <button type="button" class="kb-veil" id="kb-veil" tabindex="-1" aria-label="Закрыть клавиатуру"></button>
 </div>
 
-<script src="js/data.js?v=12"></script>
-<script src="js/tg.js?v=5"></script>
-<script src="js/app.js?v=24"></script>
+<script src="js/data.js?v=13"></script>
+<script src="js/tg.js?v=6"></script>
+<script src="js/app.js?v=25"></script>
 </body>
 </html>
